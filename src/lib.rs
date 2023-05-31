@@ -1,12 +1,171 @@
-use std::println;
-
+use wgpu::util::DeviceExt;
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
     window::{Window, WindowBuilder},
 };
 
-struct State {
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct Vertex {
+    position: [f32; 3],
+    color: [f32; 3],
+}
+
+// lib.rs
+impl Vertex {
+    const ATTRIBS: [wgpu::VertexAttribute; 2] =
+        wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3];
+
+    fn desc() -> wgpu::VertexBufferLayout<'static> {
+        use std::mem;
+
+        wgpu::VertexBufferLayout {
+            array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &Self::ATTRIBS,
+        }
+    }
+}
+
+struct Mesh<'a> {
+    vertices: &'a [Vertex],
+    indices: &'a [u16],
+}
+
+const DEMO_TRIANGLE: Mesh = Mesh {
+    vertices: &[
+        Vertex {
+            position: [0.0, 0.5, 0.0],
+            color: [1.0, 0.0, 0.0],
+        },
+        Vertex {
+            position: [-0.5, -0.5, 0.0],
+            color: [0.0, 1.0, 0.0],
+        },
+        Vertex {
+            position: [0.5, -0.5, 0.0],
+            color: [0.0, 0.0, 1.0],
+        },
+    ],
+    indices: &[0, 1, 2],
+};
+
+const DEMO_STRUCTURE: Mesh = Mesh {
+    vertices: &[
+        Vertex {
+            //0
+            position: [-0.4, -0.2, 0.0],
+            color: [0.64, 0.176, 0.164],
+        },
+        Vertex {
+            //1
+            position: [-0.5, -0.2, 0.0],
+            color: [0.64, 0.176, 0.164],
+        },
+        Vertex {
+            //2
+            position: [-0.5, 0.4, 0.0],
+            color: [0.64, 0.176, 0.164],
+        },
+        Vertex {
+            //3
+            position: [-0.4, 0.4, 0.0],
+            color: [0.64, 0.176, 0.164],
+        },
+        Vertex {
+            //4
+            position: [-0.5, 0.22, 0.0],
+            color: [0.64, 0.176, 0.164],
+        },
+        Vertex {
+            //5
+            position: [-0.7, 0.4, 0.0],
+            color: [0.64, 0.176, 0.164],
+        },
+        Vertex {
+            //6
+            position: [-0.66, 0.4, 0.0],
+            color: [0.64, 0.176, 0.164],
+        },
+        Vertex {
+            //7
+            position: [-0.5, 0.26, 0.0],
+            color: [0.64, 0.176, 0.164],
+        },
+        Vertex {
+            //8
+            position: [-0.7, 0.45, 0.0],
+            color: [0.64, 0.176, 0.164],
+        },
+        Vertex {
+            //9
+            position: [0.7, 0.45, 0.0],
+            color: [0.64, 0.176, 0.164],
+        },
+        Vertex {
+            //10
+            position: [0.7, 0.4, 0.0],
+            color: [0.64, 0.176, 0.164],
+        },
+        Vertex {
+            //11
+            position: [0.5, -0.2, 0.0],
+            color: [0.64, 0.176, 0.164],
+        },
+        Vertex {
+            //12
+            position: [0.4, -0.2, 0.0],
+            color: [0.64, 0.176, 0.164],
+        },
+        Vertex {
+            //13
+            position: [0.4, 0.4, 0.0],
+            color: [0.64, 0.176, 0.164],
+        },
+        Vertex {
+            //14
+            position: [0.5, 0.4, 0.0],
+            color: [0.64, 0.176, 0.164],
+        },
+        Vertex {
+            //15
+            position: [0.5, 0.22, 0.0],
+            color: [0.64, 0.176, 0.164],
+        },
+        Vertex {
+            //16
+            position: [0.5, 0.26, 0.0],
+            color: [0.64, 0.176, 0.164],
+        },
+        Vertex {
+            //17
+            position: [0.66, 0.4, 0.0],
+            color: [0.64, 0.176, 0.164],
+        },
+        Vertex {
+            //18
+            position: [-0.2, 0.45, 0.0],
+            color: [1.0, 0.0, 0.0],
+        },
+        Vertex {
+            //19
+            position: [0.0, 0.7, 0.0],
+            color: [0.0, 1.0, 0.0],
+        },
+        Vertex {
+            //20
+            position: [0.2, 0.45, 0.0],
+            color: [0.0, 0.0, 1.0],
+        },
+    ],
+    indices: &[
+        1, 0, 3, 1, 3, 2, 4, 7, 5, 7, 6, 5, 5, 9, 8, 5, 10, 9, 12, 14, 13, 12, 11, 14, 15, 10, 16,
+        16, 10, 17, 18, 20, 19,
+    ],
+};
+
+struct State<'a> {
     surface: wgpu::Surface,
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -15,10 +174,16 @@ struct State {
     window: Window,
     clear_color: wgpu::Color,
     render_pipeline: wgpu::RenderPipeline,
+    vertex_buffer: wgpu::Buffer,
+    index_buffer: wgpu::Buffer,
+    num_vertices: u32,
+    num_indices: u32,
+    mesh_list: Vec<&'a Mesh<'a>>,
+    curr_mesh_idx: usize,
 }
 
-impl State {
-    async fn new(window: Window) -> Self {
+impl<'a> State<'a> {
+    async fn new(window: Window) -> State<'a> {
         let size = window.inner_size();
 
         //Backends::all => Vulkan, Metal, DX12, Browser WebGPU
@@ -95,7 +260,7 @@ impl State {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: "vs_main",
-                buffers: &[],
+                buffers: &[Vertex::desc()],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
@@ -124,6 +289,25 @@ impl State {
             multiview: None,
         });
 
+        let mesh_list = vec![&DEMO_TRIANGLE, &DEMO_STRUCTURE];
+        let curr_mesh_idx = 0;
+
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Vertex Buffer"),
+            contents: bytemuck::cast_slice(mesh_list[curr_mesh_idx].vertices),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
+        let num_vertices = mesh_list[curr_mesh_idx].vertices.len() as u32;
+
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Index Buffer"),
+            contents: bytemuck::cast_slice(mesh_list[curr_mesh_idx].indices),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+
+        let num_indices = mesh_list[curr_mesh_idx].indices.len() as u32;
+
         Self {
             window,
             surface,
@@ -133,6 +317,12 @@ impl State {
             size,
             render_pipeline,
             clear_color: wgpu::Color::BLACK,
+            vertex_buffer,
+            index_buffer,
+            num_vertices,
+            num_indices,
+            mesh_list: vec![&DEMO_TRIANGLE, &DEMO_STRUCTURE],
+            curr_mesh_idx,
         }
     }
 
@@ -160,8 +350,51 @@ impl State {
                 };
                 true
             }
+            WindowEvent::KeyboardInput {
+                input:
+                    KeyboardInput {
+                        state: ElementState::Pressed,
+                        virtual_keycode: Some(VirtualKeyCode::Space),
+                        ..
+                    },
+                ..
+            } => {
+                self.next_mesh();
+                true
+            }
             _ => false,
         }
+    }
+
+    fn set_mesh(&mut self, new_mesh: &Mesh) {
+        self.vertex_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Vertex Buffer"),
+                contents: bytemuck::cast_slice(new_mesh.vertices),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+
+        self.num_vertices = new_mesh.vertices.len() as u32;
+
+        self.index_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Index Buffer"),
+                contents: bytemuck::cast_slice(new_mesh.indices),
+                usage: wgpu::BufferUsages::INDEX,
+            });
+
+        self.num_indices = new_mesh.indices.len() as u32;
+    }
+
+    fn next_mesh(&mut self) {
+        self.curr_mesh_idx += 1;
+        if self.curr_mesh_idx >= self.mesh_list.len() {
+            self.curr_mesh_idx = 0;
+        }
+
+        self.set_mesh(self.mesh_list[self.curr_mesh_idx]);
     }
 
     fn update(&mut self) {}
@@ -191,7 +424,9 @@ impl State {
             depth_stencil_attachment: None,
         });
         render_pass.set_pipeline(&self.render_pipeline);
-        render_pass.draw(0..3, 0..1);
+        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+        render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16); // 1.
+        render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
 
         drop(render_pass);
 
